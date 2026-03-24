@@ -1,8 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/useStore';
 import { Ledger } from '../types';
 import { ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, eachMonthOfInterval, isSameMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, eachMonthOfInterval, isSameMonth, startOfDay, endOfDay } from 'date-fns';
 import { X, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,9 +10,10 @@ import { motion, AnimatePresence } from 'motion/react';
 export function Statistics({ ledger }: { ledger: Ledger }) {
   const { records } = useAppStore();
   
-  const [timeRange, setTimeRange] = useState<'month' | 'half_year'>('month');
+  const [timeRange, setTimeRange] = useState<'daily' | 'monthly'>('daily');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [expandedTags, setExpandedTags] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Reset expanded state when tags or time change
   useEffect(() => {
@@ -22,8 +23,8 @@ export function Statistics({ ledger }: { ledger: Ledger }) {
   const now = new Date();
   
   const timeFilteredRecords = useMemo(() => {
-    const start = timeRange === 'month' ? startOfMonth(now) : startOfMonth(subMonths(now, 5));
-    const end = endOfMonth(now);
+    const start = timeRange === 'daily' ? startOfDay(subMonths(now, 6)) : startOfMonth(subMonths(now, 24));
+    const end = endOfDay(now);
     return records.filter(r => 
       r.ledgerId === ledger.id && 
       r.date >= start.getTime() && 
@@ -42,8 +43,8 @@ export function Statistics({ ledger }: { ledger: Ledger }) {
   [filteredRecords]);
 
   const trendData = useMemo(() => {
-    if (timeRange === 'month') {
-      const days = eachDayOfInterval({ start: startOfMonth(now), end: endOfMonth(now) });
+    if (timeRange === 'daily') {
+      const days = eachDayOfInterval({ start: startOfDay(subMonths(now, 6)), end: endOfDay(now) });
       return days.map(day => {
         const amount = filteredRecords
           .filter(r => isSameDay(new Date(r.date), day))
@@ -51,15 +52,22 @@ export function Statistics({ ledger }: { ledger: Ledger }) {
         return { date: format(day, 'MM-dd'), amount };
       });
     } else {
-      const months = eachMonthOfInterval({ start: startOfMonth(subMonths(now, 5)), end: endOfMonth(now) });
+      const months = eachMonthOfInterval({ start: startOfMonth(subMonths(now, 24)), end: endOfMonth(now) });
       return months.map(month => {
         const amount = filteredRecords
           .filter(r => isSameMonth(new Date(r.date), month))
           .reduce((sum, r) => sum + r.amount, 0);
-        return { date: format(month, 'MM月'), amount };
+        return { date: format(month, 'yy-MM'), amount };
       });
     }
   }, [filteredRecords, timeRange]);
+
+  // Auto-scroll to the rightmost (latest) data when range or data changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [timeRange, trendData.length]);
 
   const distribution = useMemo(() => {
     let onlyCurrentAmount = 0;
@@ -110,16 +118,16 @@ export function Statistics({ ledger }: { ledger: Ledger }) {
       <div className="flex justify-end">
         <div className="bg-gray-200/50 p-1 rounded-xl inline-flex">
           <button 
-            onClick={() => setTimeRange('month')}
-            className={cn("px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all", timeRange === 'month' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
+            onClick={() => setTimeRange('daily')}
+            className={cn("px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all", timeRange === 'daily' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
           >
-            本月
+            按日趋势
           </button>
           <button 
-            onClick={() => setTimeRange('half_year')}
-            className={cn("px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all", timeRange === 'half_year' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
+            onClick={() => setTimeRange('monthly')}
+            className={cn("px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all", timeRange === 'monthly' ? "bg-white shadow-sm text-gray-900" : "text-gray-500")}
           >
-            近半年
+            按月趋势
           </button>
         </div>
       </div>
@@ -159,39 +167,41 @@ export function Statistics({ ledger }: { ledger: Ledger }) {
           <span className="text-2xl font-medium text-gray-400 mr-1">¥</span>
           {totalFilteredAmount.toFixed(2)}
         </div>
-        <div className="h-[180px] -ml-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trendData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis 
-                dataKey="date" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 11, fill: '#9ca3af' }} 
-                dy={10}
-                minTickGap={20}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickFormatter={(val) => `¥${val}`}
-                width={50}
-              />
-              <Tooltip
-                formatter={(value: number) => [`¥ ${value.toFixed(2)}`, '金额']}
-                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="amount" 
-                stroke="#6366f1" 
-                strokeWidth={3}
-                dot={false}
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="overflow-x-auto scrollbar-hide -ml-4 pb-2" ref={scrollRef}>
+          <div style={{ width: Math.max(trendData.length * (timeRange === 'daily' ? 40 : 50), 300), height: 180 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{ top: 5, right: 15, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#9ca3af' }} 
+                  dy={10}
+                  minTickGap={20}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 11, fill: '#9ca3af' }}
+                  tickFormatter={(val) => `¥${val}`}
+                  width={50}
+                />
+                <Tooltip
+                  formatter={(value: number) => [`¥ ${value.toFixed(2)}`, '金额']}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="amount" 
+                  stroke="#6366f1" 
+                  strokeWidth={3}
+                  dot={false}
+                  activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 

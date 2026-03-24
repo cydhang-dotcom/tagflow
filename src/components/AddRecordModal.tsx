@@ -3,7 +3,7 @@ import { BottomSheet } from './ui/BottomSheet';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { useAppStore } from '../store/useStore';
-import { Ledger } from '../types';
+import { Ledger, RecordItem } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { X } from 'lucide-react';
@@ -12,10 +12,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   ledger: Ledger;
+  editingRecord?: RecordItem | null;
 }
 
-export function AddRecordModal({ isOpen, onClose, ledger }: Props) {
-  const { addRecord, addTag, deleteTag } = useAppStore();
+export function AddRecordModal({ isOpen, onClose, ledger, editingRecord }: Props) {
+  const { addRecord, updateRecord, addTag, deleteTag } = useAppStore();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [note, setNote] = useState('');
@@ -26,15 +27,22 @@ export function AddRecordModal({ isOpen, onClose, ledger }: Props) {
 
   useEffect(() => {
     if (isOpen) {
-      setAmount('');
-      setDate(format(new Date(), 'yyyy-MM-dd'));
-      setNote('');
-      setSelectedTags([]);
+      if (editingRecord) {
+        setAmount(editingRecord.amount.toString());
+        setDate(format(new Date(editingRecord.date), 'yyyy-MM-dd'));
+        setNote(editingRecord.note);
+        setSelectedTags(editingRecord.tagIds);
+      } else {
+        setAmount('');
+        setDate(format(new Date(), 'yyyy-MM-dd'));
+        setNote('');
+        setSelectedTags([]);
+      }
       setNewTag('');
       setError(null);
       setIsEditingTags(false);
     }
-  }, [isOpen]);
+  }, [isOpen, editingRecord]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,13 +52,22 @@ export function AddRecordModal({ isOpen, onClose, ledger }: Props) {
       return;
     }
 
-    addRecord({
-      ledgerId: ledger.id,
-      amount: Number(amount),
-      date: new Date(date).getTime(),
-      note,
-      tagIds: selectedTags
-    });
+    if (editingRecord) {
+      updateRecord(editingRecord.id, {
+        amount: Number(amount),
+        date: new Date(date).getTime(),
+        note,
+        tagIds: selectedTags
+      });
+    } else {
+      addRecord({
+        ledgerId: ledger.id,
+        amount: Number(amount),
+        date: new Date(date).getTime(),
+        note,
+        tagIds: selectedTags
+      });
+    }
     onClose();
   };
 
@@ -83,7 +100,7 @@ export function AddRecordModal({ isOpen, onClose, ledger }: Props) {
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} className="h-[92vh]">
       <div className="flex justify-between items-center mb-8">
-        <h2 className="text-xl font-semibold tracking-tight">记一笔</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{editingRecord ? '修改记录' : '记一笔'}</h2>
         <button onClick={onClose} className="text-[15px] font-medium text-indigo-600 active:opacity-70">
           取消
         </button>
@@ -132,13 +149,17 @@ export function AddRecordModal({ isOpen, onClose, ledger }: Props) {
                       type="button"
                       onClick={() => toggleTag(tag.id)}
                       className={cn(
-                        "px-4 py-2 rounded-2xl text-[15px] font-medium transition-all active:scale-95 flex items-center gap-1.5",
+                        "px-4 py-2 rounded-full text-[15px] font-semibold transition-all active:scale-95 flex items-center gap-1.5 border",
                         isSelected && !isEditingTags
-                          ? "text-white shadow-md" 
-                          : "bg-gray-100 text-gray-600",
-                        isEditingTags && "pr-3 border border-red-200 bg-red-50 text-red-600"
+                          ? "shadow-sm" 
+                          : "bg-gray-50 text-gray-600 border-transparent hover:bg-gray-100",
+                        isEditingTags && "pr-3 border-red-200 bg-red-50 text-red-600"
                       )}
-                      style={isSelected && !isEditingTags ? { backgroundColor: tag.color || '#6366f1' } : {}}
+                      style={isSelected && !isEditingTags ? { 
+                        backgroundColor: `${tag.color || '#6366f1'}26`,
+                        color: tag.color || '#6366f1',
+                        borderColor: `${tag.color || '#6366f1'}40`
+                      } : {}}
                     >
                       {tag.name}
                       {isEditingTags && <X className="w-3.5 h-3.5" />}

@@ -14,6 +14,7 @@ interface AppContextType extends AppState {
   deleteLedger: (id: string) => void;
   setActiveLedger: (id: string) => void;
   addRecord: (record: Omit<RecordItem, 'id' | 'createdAt'>) => void;
+  updateRecord: (id: string, record: Partial<Omit<RecordItem, 'id' | 'createdAt'>>) => void;
   deleteRecord: (id: string) => void;
   addTag: (ledgerId: string, name: string) => void;
   deleteTag: (ledgerId: string, tagId: string) => void;
@@ -108,6 +109,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
+  const updateRecord = (id: string, record: Partial<Omit<RecordItem, 'id' | 'createdAt'>>) => {
+    setState(prev => ({
+      ...prev,
+      records: prev.records.map(r => r.id === id ? { ...r, ...record } : r)
+    }));
+  };
+
   const deleteRecord = (id: string) => {
     setState(prev => ({
       ...prev,
@@ -171,7 +179,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   return (
-    <AppContext.Provider value={{ ...state, createLedger, deleteLedger, setActiveLedger, addRecord, deleteRecord, addTag, deleteTag, reorderTags }}>
+    <AppContext.Provider value={{ ...state, createLedger, deleteLedger, setActiveLedger, addRecord, updateRecord, deleteRecord, addTag, deleteTag, reorderTags }}>
       {children}
     </AppContext.Provider>
   );
